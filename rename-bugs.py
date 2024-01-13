@@ -2,14 +2,11 @@
 
 import argparse
 import os.path
+import re
 
 import bugzilla
 from rich.console import Console
 from rich.theme import Theme
-
-
-def mark_red(s: str):
-    return f"[red]{s}[/red]"
 
 
 def main():
@@ -40,13 +37,19 @@ def main():
     search = bz.build_query(short_desc=args.old,
                             status=["UNCONFIRMED", "CONFIRMED", "IN_PROGRESS"])
     for bug in bz.query(search):
-        old_color = f"[old]{args.old}[/old]"
-        new_color = f"[new]{args.new}[/new]"
-        console.print(f"[bugno]#{bug.id}[/bugno] - "
-                      f"{bug.summary.replace(args.old, old_color)}")
-        new_summary = bug.summary.replace(args.old, args.new)
-        console.print(f"{' ' * len(str(bug.id))}  > "
-                      f"{new_summary.replace(args.new, new_color)}")
+        pkg_re = re.compile(
+            f"(^|[^\\w+_-])({args.old})(?!([\\w+_]|-[a-zA-Z]))")
+        new_summary = pkg_re.sub(f"\\1{args.new}", bug.summary)
+        if new_summary == bug.summary:
+            continue
+
+        console.print(
+            f"[bugno]#{bug.id}[/bugno] - "
+            f"{pkg_re.sub(r'\1[old]\2[/old]', bug.summary)}")
+        console.print(
+            f"{' ' * len(str(bug.id))}  + "
+            f"{pkg_re.sub(f'\\1[new]{args.new}[/new]', bug.summary)}")
+
         if not args.pretend:
             update = bz.build_update(summary=new_summary)
             bz.update_bugs([bug.id], update)
